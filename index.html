@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Điều Khiển 4 Quạt">
+  <title>Tủ Điều Khiển Quạt 1 – Quạt 4</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #1e293b;
+      --card-inner: #0f172a;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --green: #16a34a;
+      --green-bright: #4ade80;
+      --green-glow: rgba(22, 163, 74, 0.45);
+      --blue: #2563eb;
+      --cyan: #38bdf8;
+      --amber: #f59e0b;
+      --red: #dc2626;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(circle at top, #172554 0%, var(--bg) 55%);
+      color: var(--text);
+      max-width: 460px;
+      margin: 0 auto;
+      padding: 14px 14px 30px;
+      line-height: 1.45;
+      min-height: 100vh;
+    }
+
+    .card {
+      background: rgba(30, 41, 59, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(8px);
+    }
+
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #334155;
+      color: #e2e8f0;
+      white-space: nowrap;
+    }
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+    .fb-ok { background: rgba(22, 163, 74, 0.2); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.35); }
+    .fb-ok .badge-dot { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+    .fb-warn { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.35); }
+    .fb-warn .badge-dot { background: #fbbf24; }
+    .fb-err { background: rgba(220, 38, 38, 0.22); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.35); }
+    .fb-err .badge-dot { background: #f87171; }
+
+    /* Khung viền mô phỏng màn hình LCD trực quan trên mặt tủ */
+    .lcd-bezel {
+      margin-top: 13px;
+      background: #090d16;
+      border: 2px solid #334155;
+      border-radius: 14px;
+      padding: 6px;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.85);
+    }
+
+    .lcd-screen {
+      background: linear-gradient(180deg, #102a20 0%, #0c2119 100%);
+      border: 1px solid #1f513b;
+      border-radius: 9px;
+      padding: 10px 12px;
+      font-family: "JetBrains Mono", "Courier New", Consolas, monospace;
+      color: #6ee7b7;
+      text-shadow: 0 0 8px rgba(110, 231, 183, 0.35);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .lcd-screen::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.08) 0px,
+        rgba(0, 0, 0, 0.08) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      pointer-events: none;
+    }
+
+    .lcd-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 700;
+      padding-bottom: 7px;
+      margin-bottom: 8px;
+      border-bottom: 1px dashed rgba(110, 231, 183, 0.28);
+      letter-spacing: 0.6px;
+    }
+
+    .lcd-fan-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      font-size: 13.5px;
+      font-weight: 700;
+    }
+
+    .lcd-fan-cell {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(6, 20, 14, 0.45);
+      border: 1px solid rgba(110, 231, 183, 0.16);
+      padding: 5px 8px;
+      border-radius: 6px;
+    }
+    .lcd-fan-cell.active {
+      background: rgba(16, 185, 129, 0.18);
+      border-color: rgba(110, 231, 183, 0.5);
+      color: #ecfdf5;
+    }
+
+    .lcd-fan-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+    }
+
+    .lcd-msg-bar {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed rgba(110, 231, 183, 0.22);
+      font-size: 12px;
+      color: #a7f3d0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+
+    @keyframes spinFan {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    .spin-icon {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      vertical-align: middle;
+    }
+    .spinning {
+      animation: spinFan 0.9s linear infinite;
+    }
+
+    .status-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 11px;
+      font-size: 13px;
+      color: var(--muted);
+      gap: 8px;
+    }
+
+    input[type="text"], input[type="password"], input[type="time"], select {
+      width: 100%;
+      padding: 11px 12px;
+      margin: 5px 0;
+      border-radius: 10px;
+      border: 1px solid #475569;
+      background: var(--card-inner);
+      color: #fff;
+      font-size: 15px;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--cyan); }
+
+    .pass-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .pass-wrap input { padding-right: 64px; }
+    .pass-toggle {
+      position: absolute;
+      right: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      background: #334155;
+      color: #e2e8f0;
+      border-radius: 7px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    button {
+      padding: 14px 10px;
+      border: none;
+      border-radius: 13px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.18s ease, box-shadow 0.18s ease;
+    }
+    button:active { transform: scale(0.97); }
+
+    .relay-btn {
+      text-align: left;
+      padding: 13px 12px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .relay-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      font-size: 15px;
+      font-weight: 800;
+    }
+    .fan-svg {
+      width: 22px;
+      height: 22px;
+      fill: currentColor;
+      opacity: 0.7;
+    }
+    .relay-sub {
+      font-size: 12px;
+      font-weight: 500;
+      opacity: 0.85;
+    }
+    .relay-sch {
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 2px;
+      color: #93c5fd;
+    }
+
+    .btn-off { background: #293548; color: #cbd5e1; }
+    .btn-on {
+      background: linear-gradient(145deg, #16a34a, #15803d);
+      color: #ffffff;
+      box-shadow: 0 0 18px var(--green-glow);
+      border-color: rgba(187, 247, 208, 0.4);
+    }
+    .btn-on .fan-svg {
+      opacity: 1;
+      animation: spinFan 0.85s linear infinite;
+      filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.6));
+    }
+    .btn-on .relay-sch { color: #dcfce7; }
+
+    .btn-all-on { background: #0284c7; color: #fff; }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-login  { width: 100%; margin-top: 10px; background: var(--blue); color: #fff; padding: 13px; font-size: 15px; }
+    .btn-sync   { background: #334155; color: #e2e8f0; padding: 6px 11px; font-size: 12px; border-radius: 8px; }
+    .btn-logout {
+      width: 100%;
+      margin-top: 10px;
+      background: transparent;
+      border: 1px solid #475569;
+      color: var(--muted);
+      padding: 10px;
+      font-size: 13px;
+    }
+
+    .sch-list {
+      font-size: 13px;
+      color: #cbd5e1;
+      background: var(--card-inner);
+      border: 1px solid #334155;
+      padding: 10px 12px;
+      border-radius: 12px;
+      margin-top: 10px;
+    }
+    .sch-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(148, 163, 184, 0.18);
+      cursor: pointer;
+    }
+    .sch-item:last-child { border-bottom: none; }
+    .sch-item:hover { color: #fff; }
+
+    .time-field-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .clear-mini {
+      background: none;
+      border: none;
+      color: #f87171;
+      font-size: 12px;
+      padding: 2px 4px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- Biểu tượng cánh quạt dùng chung -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <symbol id="fan-blade-icon" viewBox="0 0 24 24">
+        <path d="M12 10.2a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6zm-.8-7.7C8.5 2.5 7 4.7 7.6 7.2c.3 1.2 1.1 2.2 2.2 2.7-.4.3-.7.7-.9 1.2-1.2-2.2-3.7-3.6-6.4-2.8-2.2.7-3 3.3-1.4 5 1.3 1.4 3.4 1.7 5.2.9.9-.4 1.7-1.1 2.2-1.9.3.4.7.7 1.2.9-2.2 1.2-3.6 3.7-2.8 6.4.7 2.2 3.3 3 5 1.4 1.4-1.3 1.7-3.4.9-5.2-.4-.9-1.1-1.7-1.9-2.2.4-.3.7-.7.9-1.2 1.2 2.2 3.7 3.6 6.4 2.8 2.2-.7 3-3.3 1.4-5-1.3-1.4-3.4-1.7-5.2-.9-.9.4-1.7 1.1-2.2 1.9-.3-.4-.7-.7-1.2-.9 2.2-1.2 3.6-3.7 2.8-6.4-.6-2-2.6-2.9-4.6-1.4z"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- KHUNG ĐĂNG NHẬP NHANH -->
+  <div id="loginCard" class="card">
+    <div class="title">MỞ KHÓA TỦ ĐIỀU KHIỂN QUẠT</div>
+    <p style="margin:6px 0 10px; font-size:13px; color:#94a3b8;">
+      Nhập mật khẩu MQTT để điều khiển Quạt 1 – Quạt 4 qua 4G / Wi-Fi
+    </p>
+
+    <div class="pass-wrap">
+      <input id="pass" type="password" placeholder="Nhập mật khẩu MQTT..." onkeydown="if(event.key==='Enter') connectBroker()">
+      <button type="button" class="pass-toggle" onclick="togglePassVisibility()" id="eyeBtn">Hiện</button>
+    </div>
+
+    <label style="display:flex; align-items:center; gap:8px; margin:9px 0 4px; font-size:13px; color:#cbd5e1; cursor:pointer;">
+      <input id="rememberPass" type="checkbox" checked>
+      Ghi nhớ mật khẩu trên điện thoại này
+    </label>
+
+    <button class="btn-login" onclick="connectBroker()">KẾT NỐI NGAY</button>
+
+    <details style="margin-top:12px; font-size:13px; color:#94a3b8;">
+      <summary style="cursor:pointer; font-weight:600;">Kiểm tra / đổi địa chỉ EMQX &amp; Username</summary>
+      <div style="margin-top:8px;">
+        <label style="font-size:12px;">EMQX Address (cổng WSS 8084):</label>
+        <input id="host" type="text" placeholder="vd: ma7ff2a7.ala.asia-southeast1.emqxsl.com">
+        <label style="font-size:12px;">MQTT Username:</label>
+        <input id="user" type="text" placeholder="MQTT Username">
+        <label style="font-size:12px;">Topic gốc:</label>
+        <input id="prefix" type="text" placeholder="hai_iot_2026/contactor">
+      </div>
+    </details>
+  </div>
+
+  <!-- BẢNG ĐIỀU KHIỂN TRUNG TÂM & MÀN HÌNH LCD TRỰC QUAN -->
+  <div class="card">
+    <div class="header-row">
+      <div class="title">HỆ THỐNG ĐIỀU KHIỂN 4 QUẠT</div>
+      <span id="connBadge" class="badge"><span class="badge-dot"></span><span id="connText">Chưa kết nối</span></span>
+    </div>
+
+    <div class="lcd-bezel">
+      <div class="lcd-screen" title="Màn hình LCD giám sát trực quan Quạt 1 đến Quạt 4">
+        <div class="lcd-topbar">
+          <span id="lcdClock">--:--:--</span>
+          <span id="lcdSchFlag" style="font-size:12px; opacity:0.85;"></span>
+          <span id="lcdTag">[CHỜ MẠNG]</span>
+        </div>
+
+        <div class="lcd-fan-grid">
+          <div id="lcdCell0" class="lcd-fan-cell">
+            <span>Quạt 1</span>
+            <span class="lcd-fan-state"><svg class="spin-icon" id="lcdSpin0"><use href="#fan-blade-icon"/></svg><span id="lcdTxt0">TẮT</span></span>
+          </div>
+          <div id="lcdCell1" class="lcd-fan-cell">
+            <span>Quạt 2</span>
+            <span class="lcd-fan-state"><svg class="spin-icon" id="lcdSpin1"><use href="#fan-blade-icon"/></svg><span id="lcdTxt1">TẮT</span></span>
+          </div>
+          <div id="lcdCell2" class="lcd-fan-cell">
+            <span>Quạt 3</span>
+            <span class="lcd-fan-state"><svg class="spin-icon" id="lcdSpin2"><use href="#fan-blade-icon"/></svg><span id="lcdTxt2">TẮT</span></span>
+          </div>
+          <div id="lcdCell3" class="lcd-fan-cell">
+            <span>Quạt 4</span>
+            <span class="lcd-fan-state"><svg class="spin-icon" id="lcdSpin3"><use href="#fan-blade-icon"/></svg><span id="lcdTxt3">TẮT</span></span>
+          </div>
+        </div>
+
+        <div class="lcd-msg-bar">
+          <span id="msgText">Chờ kết nối EMQX...</span>
+          <span><strong id="activeCnt">0</strong>/4 chạy</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-meta">
+      <span>Chạm vào từng ô để Bật / Tắt quạt</span>
+      <button class="btn-sync" onclick="sendCmd('SYNC')">Đồng bộ</button>
+    </div>
+
+    <div class="grid">
+      <button id="r0" class="relay-btn btn-off" onclick="sendCmd('T1')">
+        <div class="relay-top">
+          <span>QUẠT 1</span>
+          <svg class="fan-svg"><use href="#fan-blade-icon"/></svg>
+        </div>
+        <div class="relay-sub">Contactor CJX2 • D27</div>
+        <div id="schBadge0" class="relay-sch">Chưa hẹn giờ</div>
+      </button>
+
+      <button id="r1" class="relay-btn btn-off" onclick="sendCmd('T2')">
+        <div class="relay-top">
+          <span>QUẠT 2</span>
+          <svg class="fan-svg"><use href="#fan-blade-icon"/></svg>
+        </div>
+        <div class="relay-sub">Relay 2 • D26</div>
+        <div id="schBadge1" class="relay-sch">Chưa hẹn giờ</div>
+      </button>
+
+      <button id="r2" class="relay-btn btn-off" onclick="sendCmd('T3')">
+        <div class="relay-top">
+          <span>QUẠT 3</span>
+          <svg class="fan-svg"><use href="#fan-blade-icon"/></svg>
+        </div>
+        <div class="relay-sub">Relay 3 • D25</div>
+        <div id="schBadge2" class="relay-sch">Chưa hẹn giờ</div>
+      </button>
+
+      <button id="r3" class="relay-btn btn-off" onclick="sendCmd('T4')">
+        <div class="relay-top">
+          <span>QUẠT 4</span>
+          <svg class="fan-svg"><use href="#fan-blade-icon"/></svg>
+        </div>
+        <div class="relay-sub">Relay 4 • D33</div>
+        <div id="schBadge3" class="relay-sch">Chưa hẹn giờ</div>
+      </button>
+    </div>
+
+    <div class="grid">
+      <button class="btn-all-on" onclick="sendCmd('ALL_ON')">BẬT CẢ 4 QUẠT</button>
+      <button class="btn-danger" onclick="sendCmd('ALL_OFF')">TẮT KHẨN CẤP</button>
+    </div>
+  </div>
+
+  <!-- BỘ HẸN GIỜ THỜI GIAN THỰC CHO QUẠT 1 ĐẾN QUẠT 4 -->
+  <div class="card">
+    <div class="header-row">
+      <div class="title" style="font-size:15px;">HẸN GIỜ QUẠT HẰNG NGÀY (GMT+7)</div>
+      <span style="font-size:11px; color:#94a3b8;">Lưu Flash ESP32</span>
+    </div>
+
+    <div id="schSummary" class="sch-list">Chưa đồng bộ lịch hẹn từ mạch...</div>
+
+    <div style="margin-top:12px;">
+      <label style="font-size:13px; color:#94a3b8;">Chọn quạt cần đặt lịch:</label>
+      <select id="schCh" onchange="fillScheduleInputs()">
+        <option value="1">Quạt 1 — Contactor CJX2 (D27)</option>
+        <option value="2">Quạt 2 — Relay 2 (D26)</option>
+        <option value="3">Quạt 3 — Relay 3 (D25)</option>
+        <option value="4">Quạt 4 — Relay 4 (D33)</option>
+      </select>
+
+      <div class="grid" style="margin-top:6px;">
+        <div>
+          <div class="time-field-head">
+            <span>Giờ BẬT quạt:</span>
+            <button type="button" class="clear-mini" onclick="document.getElementById('timeOn').value=''">Xóa</button>
+          </div>
+          <input id="timeOn" type="time">
+        </div>
+        <div>
+          <div class="time-field-head">
+            <span>Giờ TẮT quạt:</span>
+            <button type="button" class="clear-mini" onclick="document.getElementById('timeOff').value=''">Xóa</button>
+          </div>
+          <input id="timeOff" type="time">
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:8px;">
+        <button class="btn-login" style="margin:0; padding:13px 10px; font-size:14px;" onclick="saveSchedule()">LƯU HẸN GIỜ</button>
+        <button class="btn-off" style="margin:0; padding:13px 10px; font-size:14px;" onclick="clearSchedule()">XÓA LỊCH QUẠT NÀY</button>
+      </div>
+    </div>
+
+    <button id="logoutBtn" class="btn-logout hidden" onclick="logoutBroker()">Đổi mật khẩu / Cấu hình kết nối</button>
+  </div>
+
+  <script>
+    const DEFAULT_HOST   = "ma7ff2a7.ala.asia-southeast1.emqxsl.com";
+    const DEFAULT_USER   = "hai_admin";
+    const DEFAULT_PREFIX = "hai_iot_2026/contactor";
+
+    let client = null;
+    let topicCmd = "", topicState = "";
+    let cachedOn = ["", "", "", ""];
+    let cachedOff = ["", "", "", ""];
+    let lastSchedSignature = "";
+
+    window.onload = () => {
+      document.getElementById('host').value   = localStorage.getItem('emqx_host')   || DEFAULT_HOST;
+      document.getElementById('user').value   = localStorage.getItem('emqx_user')   || DEFAULT_USER;
+      document.getElementById('prefix').value = localStorage.getItem('emqx_prefix') || DEFAULT_PREFIX;
+
+      const savedPass = localStorage.getItem('emqx_pass');
+      if (savedPass) {
+        document.getElementById('pass').value = savedPass;
+        connectBroker();
+      }
+    };
+
+    function togglePassVisibility() {
+      const p = document.getElementById('pass');
+      const b = document.getElementById('eyeBtn');
+      if (p.type === 'password') {
+        p.type = 'text';
+        b.innerText = 'Ẩn';
+      } else {
+        p.type = 'password';
+        b.innerText = 'Hiện';
+      }
+    }
+
+    function setBadge(stateClass, text) {
+      const badge = document.getElementById('connBadge');
+      badge.className = 'badge ' + (stateClass || '');
+      document.getElementById('connText').innerText = text;
+    }
+
+    function cleanHostInput(raw) {
+      return raw.trim()
+        .replace(/^wss?:\/\//i, '')
+        .replace(/^mqtts?:\/\//i, '')
+        .replace(/^https?:\/\//i, '')
+        .replace(/\/.*$/, '')
+        .replace(/:.*$/, '')
+        .trim();
+    }
+
+    function normalizeFanLabel(txt) {
+      if (!txt) return "---";
+      return String(txt)
+        .replace(/Kenh\s*([1-4])/gi, "Quạt $1")
+        .replace(/KÊNH\s*([1-4])/gi, "QUẠT $1")
+        .replace(/\bK([1-4])\b/g, "Quạt $1")
+        .replace(/4 kenh/gi, "4 quạt");
+    }
+
+    function connectBroker() {
+      const host   = cleanHostInput(document.getElementById('host').value);
+      const user   = document.getElementById('user').value.trim();
+      const pass   = document.getElementById('pass').value;
+      const prefix = document.getElementById('prefix').value.trim().replace(/\/+$/, '');
+
+      if (!pass) return alert("Vui lòng nhập mật khẩu MQTT!");
+      if (!host || !user) return alert("Vui lòng kiểm tra lại địa chỉ EMQX và Username!");
+
+      document.getElementById('host').value = host;
+      localStorage.setItem('emqx_host', host);
+      localStorage.setItem('emqx_user', user);
+      localStorage.setItem('emqx_prefix', prefix);
+
+      if (document.getElementById('rememberPass').checked) {
+        localStorage.setItem('emqx_pass', pass);
+      } else {
+        localStorage.removeItem('emqx_pass');
+      }
+
+      topicCmd   = prefix + "/cmd";
+      topicState = prefix + "/state";
+
+      if (client) client.end(true);
+      setBadge('fb-warn', 'Đang kết nối...');
+
+      client = mqtt.connect(`wss://${host}:8084/mqtt`, {
+        clientId: 'FanWeb_' + Math.random().toString(16).substring(2, 9),
+        username: user,
+        password: pass,
+        reconnectPeriod: 3000,
+        connectTimeout: 10000
+      });
+
+      client.on('connect', () => {
+        setBadge('fb-ok', 'Trực tuyến (4G/Wi-Fi)');
+        document.getElementById('lcdTag').innerText = '[☁ EMQX]';
+        document.getElementById('loginCard').classList.add('hidden');
+        document.getElementById('logoutBtn').classList.remove('hidden');
+        client.subscribe(topicState, { qos: 1 });
+        sendCmd('SYNC');
+      });
+
+      client.on('error', () => {
+        setBadge('fb-err', 'Sai mật khẩu / Lỗi mạng');
+        document.getElementById('lcdTag').innerText = '[LỖI!]';
+        document.getElementById('loginCard').classList.remove('hidden');
+      });
+
+      client.on('offline', () => {
+        setBadge('fb-warn', 'Mất mạng điện thoại');
+        document.getElementById('lcdTag').innerText = '[MẤT MẠNG]';
+      });
+
+      client.on('message', (topic, message) => {
+        try {
+          const d = JSON.parse(message.toString());
+          const espOffline = (d.cs === "MAT KET NOI!");
+
+          if (espOffline) {
+            setBadge('fb-err', 'ESP32 mất kết nối');
+            document.getElementById('lcdTag').innerText = '[OFFLINE]';
+          } else {
+            setBadge('fb-ok', 'ESP32 Trực tuyến');
+            document.getElementById('lcdTag').innerText = '[☁ EMQX]';
+          }
+
+          document.getElementById('lcdClock').innerText  = d.time || "--:--:--";
+          document.getElementById('activeCnt').innerText = (d.active !== undefined) ? d.active : 0;
+          document.getElementById('msgText').innerText   = normalizeFanLabel(d.msg);
+
+          if (Array.isArray(d.r)) {
+            for (let i = 0; i < 4; i++) {
+              const isOn = Boolean(d.r[i]);
+              const btn = document.getElementById('r' + i);
+              if (btn) btn.className = 'relay-btn ' + (isOn ? 'btn-on' : 'btn-off');
+
+              const cell = document.getElementById('lcdCell' + i);
+              const spin = document.getElementById('lcdSpin' + i);
+              const txt  = document.getElementById('lcdTxt' + i);
+              if (cell) cell.className = 'lcd-fan-cell' + (isOn ? ' active' : '');
+              if (spin) spin.className.baseVal = 'spin-icon' + (isOn ? ' spinning' : '');
+              if (txt)  txt.innerText = isOn ? 'CHẠY' : 'TẮT';
+            }
+          }
+
+          if (Array.isArray(d.on) && Array.isArray(d.off)) {
+            cachedOn  = d.on;
+            cachedOff = d.off;
+            renderScheduleSummary();
+
+            const hasAny = cachedOn.some(Boolean) || cachedOff.some(Boolean);
+            document.getElementById('lcdSchFlag').innerText = hasAny ? '⏰ HẸN GIỜ' : '';
+
+            const sig = JSON.stringify(cachedOn) + JSON.stringify(cachedOff);
+            if (sig !== lastSchedSignature) {
+              lastSchedSignature = sig;
+              fillScheduleInputs();
+            }
+          }
+        } catch (e) {
+          console.error("Lỗi đọc gói JSON:", e);
+        }
+      });
+    }
+
+    function selectFanFromList(ch) {
+      document.getElementById('schCh').value = String(ch);
+      fillScheduleInputs();
+    }
+
+    function renderScheduleSummary() {
+      let html = [];
+      for (let i = 0; i < 4; i++) {
+        const onVal  = cachedOn[i]  || "";
+        const offVal = cachedOff[i] || "";
+
+        const badgeEl = document.getElementById('schBadge' + i);
+        if (badgeEl) {
+          if (!onVal && !offVal) badgeEl.innerText = "Chưa hẹn giờ";
+          else badgeEl.innerText = `⏰ ${onVal || '--:--'} → ${offVal || '--:--'}`;
+        }
+
+        const onTxt  = onVal  ? `Bật <strong style="color:#4ade80">${onVal}</strong>`  : `Không hẹn bật`;
+        const offTxt = offVal ? `Tắt <strong style="color:#f87171">${offVal}</strong>` : `Không hẹn tắt`;
+        html.push(
+          `<div class="sch-item" onclick="selectFanFromList(${i + 1})" title="Chạm để sửa lịch Quạt ${i + 1}">` +
+          `<span><strong>Quạt ${i + 1}:</strong></span>` +
+          `<span>${onTxt} &nbsp;|&nbsp; ${offTxt}</span>` +
+          `</div>`
+        );
+      }
+      document.getElementById('schSummary').innerHTML = html.join("");
+    }
+
+    function fillScheduleInputs() {
+      const idx = parseInt(document.getElementById('schCh').value, 10) - 1;
+      if (idx >= 0 && idx < 4) {
+        document.getElementById('timeOn').value  = cachedOn[idx]  || "";
+        document.getElementById('timeOff').value = cachedOff[idx] || "";
+      }
+    }
+
+    function saveSchedule() {
+      const ch   = document.getElementById('schCh').value;
+      const tOn  = document.getElementById('timeOn').value.trim();
+      const tOff = document.getElementById('timeOff').value.trim();
+
+      if (tOn && tOff && tOn === tOff) {
+        return alert("Giờ BẬT và giờ TẮT không được trùng nhau!");
+      }
+
+      const pOn  = tOn  || "--";
+      const pOff = tOff || "--";
+      sendCmd(`SCH:${ch},${pOn},${pOff}`);
+    }
+
+    function clearSchedule() {
+      const ch = document.getElementById('schCh').value;
+      document.getElementById('timeOn').value  = "";
+      document.getElementById('timeOff').value = "";
+      sendCmd(`SCH:${ch},--,--`);
+    }
+
+    function logoutBroker() {
+      if (client) client.end(true);
+      localStorage.removeItem('emqx_pass');
+      document.getElementById('pass').value = "";
+      document.getElementById('loginCard').classList.remove('hidden');
+      document.getElementById('logoutBtn').classList.add('hidden');
+      setBadge('', 'Đã mở cài đặt');
+    }
+
+    function sendCmd(c) {
+      if (client && client.connected) {
+        client.publish(topicCmd, c);
+      } else {
+        alert("Chưa kết nối tới máy chủ EMQX! Vui lòng nhập mật khẩu và bấm KẾT NỐI NGAY.");
+      }
+    }
+  </script>
+</body>
+</html>
